@@ -44,8 +44,6 @@ func main() {
 	tracks := TracksSet{}
 	tracksAndConnections := NewTracksAndConnectionManager()
 
-	// TODO: maintain a list of streams here
-
 	// Have clients request for "key ID", "kind" (either "audio" or "video"),
 	// and "id" via query parameters, rather than URLs. Don't standardize things
 	// too much. Let the implementers of WebRTC decide what the URL paths should
@@ -117,6 +115,12 @@ func main() {
 			return
 		}
 
+		// TODO: Right now, we are sending a PLI every 3 seconds.
+		//
+		//   But, ideally, we should let the receiver decide how often they want to
+		//   send PLIs.
+		//
+		//   Fix this ASAP.
 		intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
 		if err != nil {
 			conn.WriteJSON(map[string]any{
@@ -310,9 +314,6 @@ func main() {
 	})
 
 	router.HandleFunc("/get", func(res http.ResponseWriter, req *http.Request) {
-		// TODO: implement the ability to grab a stream from another server, given
-		// a @keyID@host, kind, and id
-
 		// Unlike `broadcast`, we don't need to authenticate.
 		//
 		// That said, if a local track keyed by the key ID, kind, and id does not
@@ -398,8 +399,17 @@ func main() {
 			})
 		}
 
+		peerConnection.OnNegotiationNeeded(func() {
+			// TODO: I guess we will need another one of those channels to detect if
+			//   the connection failed. In this callback, we will be signalling that
+			//   the offer failed
+			offer, err := peerConnection.CreateOffer(nil)
+
+			// Here, we send the offer to the client, and then I guess we are supposed
+			// to wait for the answer in a for-loop that grabs WebSocket messages
+		})
+
 		tracksAndConnections.AddPeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
 		defer tracksAndConnections.RemovePeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
-
 	})
 }
