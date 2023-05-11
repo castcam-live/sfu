@@ -148,8 +148,12 @@ func (t TracksAndConnectionsManager) RemovePeerConnection(
 		return
 	}
 	pcSet.Remove(pc)
+
+	// Note: a track exists regardless of if any peer connections are listening
 }
 
+// RemoveTrack removes a track from the list of local tracks, but also removes
+// it from all receiving peer connections.
 func (t TracksAndConnectionsManager) RemoveTrack(
 	keyId KeyIDString,
 	broadcastId BroadcastIDString,
@@ -158,15 +162,22 @@ func (t TracksAndConnectionsManager) RemoveTrack(
 	t.lock.RLock()
 	defer t.lock.RUnlock()
 
+	track, trackExists := t.tracks.Get(keyId, broadcastId, kind)
 	t.tracks.Remove(keyId, broadcastId, kind)
 	pcSet, ok := t.receivingPeerConnections.Get(keyId, broadcastId, kind)
 	if !ok {
 		return
 	}
 
+	if !trackExists {
+		return
+	}
+
 	for pc := range pcSet {
-		for _, receiver := range pc.GetReceivers() {
-			receiver.Stop()
+		for _, sender := range pc.GetSenders() {
+			if sender.Track() == track {
+				pc.RemoveTrack(sender)
+			}
 		}
 	}
 }
