@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"io"
 	"log"
 	"net/http"
 
-	"github.com/clubcabana/simple-forwarding-unit/track"
+	"github.com/clubcabana/simple-forwarding-unit/trackpipe"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
@@ -43,7 +41,7 @@ var peerConnectionConfig = webrtc.Configuration{
 func main() {
 	router := mux.NewRouter()
 
-	tracks := Map3D[KeyIDString, BroadcastIDString, KindString, track.Track]{}
+	tracks := TracksSet{}
 	tracksAndConnections := NewTracksAndConnectionManager()
 
 	// TODO: maintain a list of streams here
@@ -78,7 +76,7 @@ func main() {
 		defer conn.Close()
 
 		// First authenticate
-		authenticated, _, err := wskeyauth.Handshake(conn)
+		authenticated, keyID, err := wskeyauth.Handshake(conn)
 		if err != nil {
 			log.Println(err)
 			return
@@ -164,19 +162,20 @@ func main() {
 				return
 			}
 
-			rtpBuf := make([]byte, 1400)
-			for {
-				i, _, readErr := remoteTrack.Read(rtpBuf)
-				if readErr != nil {
-					return
-				}
+			tracks.Set(
+				KeyIDString(keyID),
+				BroadcastIDString(id),
+				trackpipe.New(remoteTrack, localTrack),
+			)
 
-				// ErrClosedPipe means we don't have any subscribers, this is ok if no peers have connected yet
-				if _, err = localTrack.Write(rtpBuf[:i]); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-					panic(err)
-				}
-			}
+			tracksAndConnections.SetTrack(
+				KeyIDString(keyID),
+				BroadcastIDString(id),
+				localTrack,
+			)
 		})
+
+		defer tracks.RemoveOfAllKind(KeyIDString(keyID), BroadcastIDString(id))
 
 		closed := make(chan any)
 
@@ -267,6 +266,22 @@ func main() {
 					answer, err := peerConnection.CreateAnswer(nil)
 					if err != nil {
 						log.Printf("Failed to create answer: %s", err.Error())
+						conn.WriteJSON(map[string]any{
+							"type": "SERVER_ERROR",
+							"data": map[string]any{
+								"type": "CREATE_ANSWER_FAILED",
+							},
+						})
+						continue
+					}
+					if err = peerConnection.SetLocalDescription(answer); err != nil {
+						log.Printf("Failed to set local description: %s", err.Error())
+						conn.WriteJSON(map[string]any{
+							"type": "SERVER_ERROR",
+							"data": map[string]any{
+								"type": "SET_LOCAL_DESCRIPTION_FAILED",
+							},
+						})
 						continue
 					}
 
@@ -306,7 +321,85 @@ func main() {
 		// This means we will need a helper function to get the LocalTrack from
 		// some store
 
-	})
+		queryParams := ParseQuery(req.URL.RawQuery)
 
-	// TODO: get an HTTP server going
+		keyID, ok := queryParams["keyid"]
+		if !ok {
+			res.WriteHeader(http.StatusBadRequest)
+			res.Write([]byte("Missing key ID"))
+			return
+		}
+
+		id, ok := queryParams["id"]
+		if !ok {
+			res.WriteHeader(http.StatusBadRequest)
+			res.Write([]byte("Missing ID"))
+			return
+		}
+
+		kind, ok := queryParams["kind"]
+		if !ok {
+			res.WriteHeader(http.StatusBadRequest)
+			res.Write([]byte("Missing kind"))
+			return
+		}
+
+		conn, err := upgrader.Upgrade(res, req, nil)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer conn.Close()
+
+		m := &webrtc.MediaEngine{}
+		if err := m.RegisterDefaultCodecs(); err != nil {
+			conn.WriteJSON(map[string]any{
+				"type": "SERVER_ERROR",
+				"data": map[string]any{
+					"type": "CODEC_REGISTRATION_FAILED",
+					// TODO: add more details
+				},
+			})
+			return
+		}
+
+		i := &interceptor.Registry{}
+
+		// Use the default set of Interceptors
+		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+			conn.WriteJSON(map[string]any{
+				"type": "SERVER_ERROR",
+				"data": map[string]any{
+					"type": "INTERCEPTOR_REGISTRATION_FAILED",
+				},
+			})
+			return
+		}
+
+		intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
+		if err != nil {
+			conn.WriteJSON(map[string]any{
+				"type": "SERVER_ERROR",
+				"data": map[string]any{
+					"type": "INTERCEPTOR_CREATION_FAILED",
+				},
+			})
+			return
+		}
+		i.Add(intervalPliFactory)
+
+		peerConnection, err := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i)).NewPeerConnection(peerConnectionConfig)
+		if err != nil {
+			conn.WriteJSON(map[string]any{
+				"type": "SERVER_ERROR",
+				"data": map[string]any{
+					"type": "PEER_CONNECTION_CREATION_FAILED",
+				},
+			})
+		}
+
+		tracksAndConnections.AddPeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
+		defer tracksAndConnections.RemovePeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
+
+	})
 }

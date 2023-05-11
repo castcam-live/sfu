@@ -38,6 +38,44 @@ func (m Map3D[K1, K2, K3, V]) Set(key1 K1, key2 K2, key3 K3, value V) {
 	innerMap2[key3] = value
 }
 
+func (m Map3D[K1, K2, K3, V]) RemoveLevel2(key1 K1, key2 K2) {
+	innerMap1, ok := m[key1]
+	if !ok {
+		return
+	}
+
+	delete(innerMap1, key2)
+
+	if len(innerMap1) == 0 {
+		delete(m, key1)
+	}
+}
+
+type Pair[T any, V any] struct {
+	Left  T
+	Right V
+}
+
+func (m Map3D[K1, K2, K3, V]) IterateLevel3(key1 K1, key2 K2) <-chan Pair[K3, V] {
+	c := make(chan Pair[K3, V])
+	go func() {
+		defer close(c)
+		innerMap1, ok := m[key1]
+		if !ok {
+			return
+		}
+		innerMap2, ok := innerMap1[key2]
+		if !ok {
+			return
+		}
+		for k, v := range innerMap2 {
+			c <- Pair[K3, V]{k, v}
+		}
+	}()
+
+	return c
+}
+
 func (m Map3D[K1, K2, K3, V]) Remove(key1 K1, key2 K2, key3 K3) {
 	innerMap1, ok := m[key1]
 	if !ok {

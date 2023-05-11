@@ -1,4 +1,4 @@
-package track
+package trackpipe
 
 import (
 	"errors"
@@ -47,4 +47,8 @@ func New(
 // Stop stops the goroutine that is reading from the remote track and writing
 func (t Track) Stop() {
 	t.done.Finish()
+}
+
+func (t Track) Kind() string {
+	return t.localTrack.Kind().String()
 }

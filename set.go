@@ -13,10 +13,10 @@ func (s Set[K]) Remove(value K) {
 func (s Set[K]) Iterate() <-chan K {
 	c := make(chan K)
 	go func() {
+		defer close(c)
 		for k := range s {
 			c <- k
 		}
-		close(c)
 	}()
 
 	return c
