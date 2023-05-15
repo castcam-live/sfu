@@ -2,13 +2,19 @@ import { Subject, EventEmitter, createSubject } from "./subject";
 
 type States = "CONNECTING" | "CONNECTED" | "DISCONNECTED";
 
+/**
+ * WsSession is a simple wrapper around a WebSocket that automatically
+ * reconnects
+ */
 class WsSession {
 	private closed: boolean = false;
 	private ws: WebSocket | null = null;
 	private messageBuffer: string[] = [];
 	private _messageEvents: Subject<MessageEvent> = createSubject();
 
-	constructor(private address: string) {}
+	constructor(private address: string) {
+		this.connect();
+	}
 
 	private connect() {
 		if (this.closed) return;
@@ -42,7 +48,13 @@ export class Receiver {
 	private _mediaStream: MediaStream = new MediaStream();
 	private peerConnection: RTCPeerConnection | null = null;
 
-	constructor(address: string, private rtcPCConfig?: RTCConfiguration) {
+	constructor(
+		address: string,
+		private keyId: string,
+		private id: string,
+		private kind: string,
+		private rtcPCConfig?: RTCConfiguration
+	) {
 		const ws = new WebSocket(address);
 
 		ws.addEventListener("message", (event) => {

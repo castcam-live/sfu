@@ -241,7 +241,7 @@ func CreateHandlers() http.Handler {
 				}
 
 				switch s.Type {
-				case "DESCRIPTION":
+				case "ess":
 					type Description struct {
 						Type string `json:"type"`
 						SDP  string `json:"sdp"`
