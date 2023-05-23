@@ -1,4 +1,5 @@
 import { Subject, EventEmitter, createSubject } from "./subject";
+import { InferType, any, either, exact, object, string } from "./validator";
 
 type States = "CONNECTING" | "CONNECTED" | "DISCONNECTED";
 
@@ -44,21 +45,61 @@ class WsSession {
 	}
 }
 
+const offerSchema = object({
+	type: exact("offer"),
+	sdp: string(),
+});
+
+const descriptionSchema = object({
+	type: exact("DESCRIPTION"),
+	data: offerSchema,
+});
+
+const candidateSchema = object({
+	type: exact("CANDIDATE"),
+	data: any(),
+});
+
+const messageSchema = either(
+	object({
+		type: exact("SIGNALLING"),
+		data: either(descriptionSchema, candidateSchema),
+	})
+);
+
+type Message = InferType<typeof messageSchema>;
+
+type ReceiverParams = {
+	keyId: string;
+	streamId: string;
+	kind: string;
+};
+
 export class Receiver {
 	private _mediaStream: MediaStream = new MediaStream();
 	private peerConnection: RTCPeerConnection | null = null;
 
+	private keyId: string;
+	private streamId: string;
+	private kind: string;
+
 	constructor(
 		address: string,
-		private keyId: string,
-		private id: string,
-		private kind: string,
+		{ keyId, streamId, kind }: ReceiverParams,
 		private rtcPCConfig?: RTCConfiguration
 	) {
+		this.keyId = keyId;
+		this.streamId = streamId;
+		this.kind = kind;
+
 		const ws = new WebSocket(address);
 
 		ws.addEventListener("message", (event) => {
 			const message = JSON.parse(event.data);
+
+			const validation = messageSchema.validate(message);
+			if (validation.isValid) {
+			}
 
 			if (message.type === "SIGNALLING") {
 				if (message.data.type === "DESCRIPTION") {

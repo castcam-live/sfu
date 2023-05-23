@@ -82,24 +82,25 @@ func CreateHandlers() http.Handler {
 		}
 
 		if !authenticated {
-			conn.WriteJSON(map[string]any{
-				"type": "UNKNOWN_ERROR",
-				"data": map[string]any{
-					// TODO: provide more details here
-					"type": "AUTHENTICATION_FAILED",
-				},
-			})
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "UNKNOWN_ERROR",
+				Data: TypeOnly{"AUTHENTICATION_FAILED"},
+			}); err != nil {
+				log.Printf("Error writing JSON: %s", err.Error())
+				return
+			}
+			return
 		}
 
 		m := &webrtc.MediaEngine{}
 		if err := m.RegisterDefaultCodecs(); err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "CODEC_REGISTRATION_FAILED",
-					// TODO: add more details
-				},
-			})
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{"CODEC_REGISTRATION_FAILED"},
+			}); err != nil {
+				log.Printf("Error writing JSON: %s", err.Error())
+				return
+			}
 			return
 		}
 
@@ -107,12 +108,15 @@ func CreateHandlers() http.Handler {
 
 		// Use the default set of Interceptors
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "INTERCEPTOR_REGISTRATION_FAILED",
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "INTERCEPTOR_REGISTRATION_FAILED",
 				},
-			})
+			}); err != nil {
+				log.Printf("Error writing JSON: %s", err.Error())
+				return
+			}
 			return
 		}
 
@@ -124,24 +128,31 @@ func CreateHandlers() http.Handler {
 		//   Fix this ASAP.
 		intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
 		if err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "INTERCEPTOR_CREATION_FAILED",
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "INTERCEPTOR_CREATION_FAILED",
 				},
-			})
+			}); err != nil {
+				log.Printf("Error writing JSON: %s", err.Error())
+				return
+			}
 			return
 		}
 		i.Add(intervalPliFactory)
 
 		peerConnection, err := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i)).NewPeerConnection(peerConnectionConfig)
 		if err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "PEER_CONNECTION_CREATION_FAILED",
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "PEER_CONNECTION_CREATION_FAILED",
 				},
-			})
+			}); err != nil {
+				log.Printf("Errro writing JSON: %s", err.Error())
+				return
+			}
+			return
 		}
 
 		defer func() {
@@ -151,12 +162,15 @@ func CreateHandlers() http.Handler {
 		}()
 
 		if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "TRANSCIEVER_CREATION_FAILED",
+			if err := conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "TRANSCIEVER_CREATION_FAILED",
 				},
-			})
+			}); err != nil {
+				log.Printf("Error writing JSON: %s", err.Error())
+				return
+			}
 			return
 		}
 
@@ -195,11 +209,11 @@ func CreateHandlers() http.Handler {
 				return
 			}
 
-			if err := conn.WriteJSON(map[string]any{
-				"type": "SIGNALLING",
-				"data": map[string]any{
-					"type": "ICE_CANDIDATE",
-					"data": c,
+			if err := conn.WriteJSON(TypeData[TypeData[*webrtc.ICECandidate]]{
+				Type: "SIGNALLING",
+				Data: TypeData[*webrtc.ICECandidate]{
+					Type: "ICE_CANDIDATE",
+					Data: c,
 				},
 			}); err != nil {
 				done.Finish()
@@ -343,7 +357,7 @@ func CreateHandlers() http.Handler {
 		//    a. Send the ICE candidate to the client
 		// 8. Loop for messages from the client
 		//    a. If the message is an answer, set the remote description
-		//    b/ If the message is an ICE candidate, add the ICE candidate
+		//    b. If the message is an ICE candidate, add the ICE candidate
 
 		queryParams := ParseQuery(req.URL.RawQuery)
 

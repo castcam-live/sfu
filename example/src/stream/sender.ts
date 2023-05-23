@@ -1,5 +1,6 @@
 import { WsKeySession } from "./ws-key-session";
 import { connect, encodeBase64 } from "./wskeyid";
+import { object, unknown, exact, string, InferType } from "./validator";
 
 export async function generateKeys() {
 	return await crypto.subtle.generateKey(
@@ -19,23 +20,35 @@ export async function getClientId(keyPair: CryptoKeyPair) {
 	const encodedRaw = encodeBase64(
 		await crypto.subtle.exportKey("raw", keyPair.publicKey)
 	);
-	return `WebCrypto-raw.EC.${(algo as any).namedCurve}$${encodedRaw}`;
+	return `WebCrypto-raw.EC.${
+		(algo as KeyAlgorithm & { namedCurve: "P-256" | "P-384" | "P-256" })
+			.namedCurve
+	}$${encodedRaw}`;
 }
 
-type SignallingMessage = {
-	type: "SIGNALLING";
-	data:
-		| {
-				type: "DESCRIPTION";
-				data: {
-					type: "offer";
-					sdp: string;
-				};
-		  }
-		| {
-				type: "ICE_CANDIDATE";
-				data: RTCIceCandidate;
-		  };
+const descriptionSchema = object({
+	type: exact("DESCRIPTION"),
+	data: object({
+		type: exact("offer"),
+		sdp: string(),
+	}),
+});
+
+const candidateSchema = object({
+	type: exact("ICE_CANDIDATE"),
+	data: object({}), // An RTCIceCandidate instance
+});
+
+const signallingMessageSchema = object({
+	type: exact("SIGNALLING"),
+	data: unknown(),
+});
+
+type SignallingMessage = Omit<
+	InferType<typeof signallingMessageSchema>,
+	"data"
+> & {
+	data: InferType<typeof descriptionSchema> | InferType<typeof candidateSchema>;
 };
 
 export class Sender {
@@ -55,30 +68,39 @@ export class Sender {
 		});
 		this.pc.addEventListener("icecandidate", (event) => {
 			if (event.candidate) {
-				this.session.send(
-					JSON.stringify({
-						type: "SIGNALLING",
-						data: {
-							type: "ICE_CANDIDATE",
-							data: event.candidate,
-						},
-					})
-				);
+				const message: SignallingMessage = {
+					type: "SIGNALLING",
+					data: {
+						type: "ICE_CANDIDATE",
+						data: event.candidate,
+					},
+				};
+				this.session.send(JSON.stringify(message));
 			}
 		});
 		this.pc.addEventListener("negotiationneeded", () => {
 			Promise.resolve().then(async () => {
 				const offer = await this.pc!.createOffer();
 				this.pc!.setLocalDescription(offer);
-				this.session.send(
-					JSON.stringify({
-						type: "SIGNALLING",
+
+				if (!offer.sdp) {
+					// TODO: handle this edge case
+					console.error("An SDP was not available for some reason");
+					return;
+				}
+
+				const message: SignallingMessage = {
+					type: "SIGNALLING",
+					data: {
+						type: "DESCRIPTION",
 						data: {
-							type: "DESCRIPTION",
-							data: offer,
+							type: "offer",
+							sdp: offer.sdp,
 						},
-					})
-				);
+					},
+				};
+
+				this.session.send(JSON.stringify(message));
 			});
 		});
 		if (this.track) {
@@ -91,6 +113,11 @@ export class Sender {
 		this.pc = null;
 	}
 
+	/**
+	 * Sets the track on the peer connection, without initializing the peer
+	 * conneciton.
+	 * @param track The track to set
+	 */
 	private setTrackOnly(track: MediaStreamTrack) {
 		const sender = this.pc!.getSenders().find(
 			(sender) => sender.track === track
@@ -103,6 +130,11 @@ export class Sender {
 		}
 	}
 
+	/**
+	 * Sets the track on the peer connection, initializing the peer connection, if
+	 * it hasn't been done so already.
+	 * @param track The track to set
+	 */
 	setTrack(track: MediaStreamTrack) {
 		if (track.kind !== this.kind) {
 			this.closePc();
@@ -116,12 +148,6 @@ export class Sender {
 		}
 
 		this.initializePc();
-	}
-
-	removeTrack() {
-		this.pc?.getSenders().forEach((sender) => {
-			this.pc?.removeTrack(sender);
-		});
 	}
 
 	close() {
