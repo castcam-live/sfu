@@ -7,7 +7,6 @@ import (
 
 	wskeyauth "github.com/castcam-live/ws-key-auth/go"
 	"github.com/clubcabana/simple-forwarding-unit/finish"
-	"github.com/clubcabana/simple-forwarding-unit/trackpipe"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
@@ -184,7 +183,7 @@ func CreateHandlers() http.Handler {
 			}
 
 			tracksAndConnections.SetTrack(
-				KeyIDString(keyID),f
+				KeyIDString(keyID),
 				BroadcastIDString(id),
 				localTrack,
 			)
@@ -239,12 +238,7 @@ func CreateHandlers() http.Handler {
 			switch t.Type {
 			// We will be the one receiving offers, and responding with answers
 			case "SIGNALLING":
-				type Signalling struct {
-					Type string          `json:"type"`
-					Data json.RawMessage `json:"data"`
-				}
-
-				var s Signalling
+				var s TypeData[json.RawMessage]
 				if err = json.Unmarshal(t.Data, &s); err != nil {
 					continue
 				}
@@ -258,9 +252,9 @@ func CreateHandlers() http.Handler {
 					}
 
 					if d.Type == webrtc.SDPTypeAnswer {
-						conn.WriteJSON(map[string]any{
-							"type": "CLIENT_ERROR",
-							"data": map[string]any{
+						conn.WriteJSON(TypeData[map[string]any]{
+							Type: "CLIENT_ERROR",
+							Data: map[string]any{
 								"type": "ANSWER_RECEIVED",
 								"msg":  "Received answer from client; server can't accept answers; only offers",
 							},
@@ -270,10 +264,10 @@ func CreateHandlers() http.Handler {
 
 					if err = peerConnection.SetRemoteDescription(d); err != nil {
 						log.Printf("Failed to set remote description: %s", err.Error())
-						conn.WriteJSON(map[string]any{
-							"type": "SERVER_ERROR",
-							"data": map[string]any{
-								"type": "SET_REMOTE_DESCRIPTION_FAILED",
+						conn.WriteJSON(TypeData[TypeOnly]{
+							Type: "SERVER_ERROR",
+							Data: TypeOnly{
+								Type: "SET_REMOTE_DESCRIPTION_FAILED",
 							},
 						})
 						return
@@ -282,10 +276,10 @@ func CreateHandlers() http.Handler {
 					answer, err := peerConnection.CreateAnswer(nil)
 					if err != nil {
 						log.Printf("Failed to create answer: %s", err.Error())
-						conn.WriteJSON(map[string]any{
-							"type": "SERVER_ERROR",
-							"data": map[string]any{
-								"type": "CREATE_ANSWER_FAILED",
+						conn.WriteJSON(TypeData[TypeOnly]{
+							Type: "SERVER_ERROR",
+							Data: TypeOnly{
+								Type: "CREATE_ANSWER_FAILED",
 							},
 						})
 						continue
@@ -457,10 +451,10 @@ func CreateHandlers() http.Handler {
 			offer, err := peerConnection.CreateOffer(nil)
 
 			if err != nil {
-				conn.WriteJSON(map[string]any{
-					"type": "SERVER_ERROR",
-					"data": map[string]any{
-						"type": "CREATE_OFFER_FAILED",
+				conn.WriteJSON(TypeData[TypeOnly]{
+					Type: "SERVER_ERROR",
+					Data: TypeOnly{
+						Type: "CREATE_OFFER_FAILED",
 					},
 				})
 				done.Finish()
@@ -472,11 +466,11 @@ func CreateHandlers() http.Handler {
 				return
 			}
 
-			if err = conn.WriteJSON(map[string]any{
-				"type": "SIGNALLING",
-				"data": map[string]any{
-					"type": "DESCRIPTION",
-					"data": offer,
+			if err = conn.WriteJSON(TypeData[TypeData[webrtc.SessionDescription]]{
+				Type: "SIGNALLING",
+				Data: TypeData[webrtc.SessionDescription]{
+					Type: "DESCRIPTION",
+					Data: offer,
 				},
 			}); err != nil {
 				done.Finish()
@@ -491,11 +485,11 @@ func CreateHandlers() http.Handler {
 				return
 			}
 
-			if err = conn.WriteJSON(map[string]any{
-				"type": "SIGNALLING",
-				"data": map[string]any{
-					"type": "ICE_CANDIDATE",
-					"data": c,
+			if err = conn.WriteJSON(TypeData[TypeData[*webrtc.ICECandidate]]{
+				Type: "SIGNALLING",
+				Data: TypeData[*webrtc.ICECandidate]{
+					Type: "ICE_CANDIDATE",
+					Data: c,
 				},
 			}); err != nil {
 				done.Finish()
@@ -550,12 +544,7 @@ func CreateHandlers() http.Handler {
 
 			switch t.Type {
 			case "SIGNALLING":
-				type Signalling struct {
-					Type string          `json:"type"`
-					Data json.RawMessage `json:"data"`
-				}
-
-				var s Signalling
+				var s TypeData[json.RawMessage]
 				if err = json.Unmarshal(t.Data, &s); err != nil {
 					continue
 				}
