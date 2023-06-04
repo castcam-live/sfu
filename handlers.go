@@ -286,20 +286,20 @@ func CreateHandlers() http.Handler {
 					}
 					if err = peerConnection.SetLocalDescription(answer); err != nil {
 						log.Printf("Failed to set local description: %s", err.Error())
-						conn.WriteJSON(map[string]any{
-							"type": "SERVER_ERROR",
-							"data": map[string]any{
-								"type": "SET_LOCAL_DESCRIPTION_FAILED",
+						conn.WriteJSON(TypeData[TypeOnly]{
+							Type: "SERVER_ERROR",
+							Data: TypeOnly{
+								Type: "SET_LOCAL_DESCRIPTION_FAILED",
 							},
 						})
 						continue
 					}
 
-					if err = conn.WriteJSON(map[string]any{
-						"type": "SIGNALLING",
-						"data": map[string]any{
-							"type": "DESCRIPTION",
-							"data": answer,
+					if err = conn.WriteJSON(TypeData[TypeData[webrtc.SessionDescription]]{
+						Type: "SIGNALLING",
+						Data: TypeData[webrtc.SessionDescription]{
+							Type: "DESCRIPTION",
+							Data: answer,
 						},
 					}); err != nil {
 						return
@@ -383,10 +383,10 @@ func CreateHandlers() http.Handler {
 
 		m := &webrtc.MediaEngine{}
 		if err := m.RegisterDefaultCodecs(); err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "CODEC_REGISTRATION_FAILED",
+			conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "CODEC_REGISTRATION_FAILED",
 					// TODO: add more details
 				},
 			})
@@ -398,10 +398,10 @@ func CreateHandlers() http.Handler {
 		// Use the default set of interceptors (no idea what an "interceptor" even
 		// is)
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "INTERCEPTOR_REGISTRATION_FAILED",
+			conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "INTERCEPTOR_REGISTRATION_FAILED",
 				},
 			})
 			return
@@ -409,10 +409,10 @@ func CreateHandlers() http.Handler {
 
 		intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
 		if err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "INTERCEPTOR_CREATION_FAILED",
+			conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "INTERCEPTOR_CREATION_FAILED",
 				},
 			})
 			return
@@ -426,10 +426,10 @@ func CreateHandlers() http.Handler {
 		).
 			NewPeerConnection(peerConnectionConfig)
 		if err != nil {
-			conn.WriteJSON(map[string]any{
-				"type": "SERVER_ERROR",
-				"data": map[string]any{
-					"type": "PEER_CONNECTION_CREATION_FAILED",
+			conn.WriteJSON(TypeData[TypeOnly]{
+				Type: "SERVER_ERROR",
+				Data: TypeOnly{
+					Type: "PEER_CONNECTION_CREATION_FAILED",
 				},
 			})
 		}
