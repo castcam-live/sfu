@@ -42,13 +42,16 @@ var peerConnectionConfig = webrtc.Configuration{
 func CreateHandlers() http.Handler {
 	router := mux.NewRouter()
 
-	tracks := TracksSet{}
 	tracksAndConnections := NewTracksAndConnectionManager()
 
 	// Have clients request for "key ID", "kind" (either "audio" or "video"),
 	// and "id" via query parameters, rather than URLs. Don't standardize things
 	// too much. Let the implementers of WebRTC decide what the URL paths should
 	// look like, and have clients just query those parts.
+
+	// Discovery on how to broadcast to a server should be done through some
+	// "well known" metadata endpoint, similar to NodeInfo, HostMeta, and
+	// WebFinger
 
 	router.HandleFunc("/broadcast/{id}", func(res http.ResponseWriter, req *http.Request) {
 		// For broadcasting, we just need to be given the ID. Key ID is implied
@@ -60,6 +63,7 @@ func CreateHandlers() http.Handler {
 		// Receivers will need to create separate peer connection for each track
 		// that they need.
 
+		// Grab the ID from the URL
 		params := mux.Vars(req)
 		id, ok := params["id"]
 		if !ok {
@@ -67,6 +71,7 @@ func CreateHandlers() http.Handler {
 			return
 		}
 
+		// Handle the upgrade request (assuming it even is an upgrade request)
 		conn, err := upgrader.Upgrade(res, req, nil)
 		if err != nil {
 			log.Println(err)
@@ -92,6 +97,8 @@ func CreateHandlers() http.Handler {
 			return
 		}
 
+		// Create a media engine (which seems to be necessary for the purposes of
+		// setting up a codec). This is a Pion WebRTC thing.
 		m := &webrtc.MediaEngine{}
 		if err := m.RegisterDefaultCodecs(); err != nil {
 			if err := conn.WriteJSON(TypeData[TypeOnly]{
@@ -141,7 +148,11 @@ func CreateHandlers() http.Handler {
 		}
 		i.Add(intervalPliFactory)
 
-		peerConnection, err := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i)).NewPeerConnection(peerConnectionConfig)
+		peerConnection, err := webrtc.NewAPI(
+			webrtc.WithMediaEngine(m),
+			webrtc.WithInterceptorRegistry(i),
+		).
+			NewPeerConnection(peerConnectionConfig)
 		if err != nil {
 			if err := conn.WriteJSON(TypeData[TypeOnly]{
 				Type: "SERVER_ERROR",
@@ -161,42 +172,26 @@ func CreateHandlers() http.Handler {
 			}
 		}()
 
-		if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
-			if err := conn.WriteJSON(TypeData[TypeOnly]{
-				Type: "SERVER_ERROR",
-				Data: TypeOnly{
-					Type: "TRANSCIEVER_CREATION_FAILED",
-				},
-			}); err != nil {
-				log.Printf("Error writing JSON: %s", err.Error())
-				return
-			}
-			return
-		}
-
 		peerConnection.OnTrack(func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-			localTrack, newTrackErr := webrtc.NewTrackLocalStaticRTP(remoteTrack.Codec().RTPCodecCapability, remoteTrack.Kind().String(), "pion")
+			localTrack, newTrackErr := webrtc.NewTrackLocalStaticRTP(
+				remoteTrack.Codec().RTPCodecCapability,
+				remoteTrack.Kind().String(),
+				"pion",
+			)
 			if newTrackErr != nil {
 				log.Printf("cannot create new track: %v\n", newTrackErr)
 				return
 			}
 
-			tracks.Set(
-				KeyIDString(keyID),
-				BroadcastIDString(id),
-				trackpipe.New(remoteTrack, localTrack),
-			)
-
 			tracksAndConnections.SetTrack(
-				KeyIDString(keyID),
+				KeyIDString(keyID),f
 				BroadcastIDString(id),
 				localTrack,
 			)
 		})
 
-		defer tracks.RemoveOfAllKind(KeyIDString(keyID), BroadcastIDString(id))
-
-		done := finish.Done{}
+		done := finish.NewDone()
+		defer done.Finish()
 
 		peerConnection.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 			if s == webrtc.PeerConnectionStateClosed {
@@ -255,11 +250,7 @@ func CreateHandlers() http.Handler {
 				}
 
 				switch s.Type {
-				case "ess":
-					type Description struct {
-						Type string `json:"type"`
-						SDP  string `json:"sdp"`
-					}
+				case "DESCRIPTION":
 					var d webrtc.SessionDescription
 					if err = json.Unmarshal(s.Data, &d); err != nil {
 						log.Printf("Bad JSON message? %s", err.Error())
@@ -361,6 +352,8 @@ func CreateHandlers() http.Handler {
 
 		queryParams := ParseQuery(req.URL.RawQuery)
 
+		// Get the key ID, kind, and id from the query parameters
+
 		keyID, ok := queryParams["keyid"]
 		if !ok {
 			res.WriteHeader(http.StatusBadRequest)
@@ -382,12 +375,17 @@ func CreateHandlers() http.Handler {
 			return
 		}
 
+		// Handle the upgrade request (assuming it was an upgrade request; fail
+		// otherwise)
+
 		conn, err := upgrader.Upgrade(res, req, nil)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 		defer conn.Close()
+
+		// Create a media engine, for codecs and stuff
 
 		m := &webrtc.MediaEngine{}
 		if err := m.RegisterDefaultCodecs(); err != nil {
@@ -403,7 +401,8 @@ func CreateHandlers() http.Handler {
 
 		i := &interceptor.Registry{}
 
-		// Use the default set of Interceptors
+		// Use the default set of interceptors (no idea what an "interceptor" even
+		// is)
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
 			conn.WriteJSON(map[string]any{
 				"type": "SERVER_ERROR",
@@ -426,7 +425,12 @@ func CreateHandlers() http.Handler {
 		}
 		i.Add(intervalPliFactory)
 
-		peerConnection, err := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i)).NewPeerConnection(peerConnectionConfig)
+		// Create an RTCPeerConnection
+		peerConnection, err := webrtc.NewAPI(
+			webrtc.WithMediaEngine(m),
+			webrtc.WithInterceptorRegistry(i),
+		).
+			NewPeerConnection(peerConnectionConfig)
 		if err != nil {
 			conn.WriteJSON(map[string]any{
 				"type": "SERVER_ERROR",
@@ -436,8 +440,16 @@ func CreateHandlers() http.Handler {
 			})
 		}
 
-		done := finish.Done{}
+		done := finish.NewDone()
+		defer done.Finish()
 
+		peerConnection.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
+			if s == webrtc.PeerConnectionStateClosed {
+				done.Finish()
+			}
+		})
+
+		// Listen for negotiation needed events.
 		peerConnection.OnNegotiationNeeded(func() {
 			// TODO: I guess we will need another one of those channels to detect if
 			//   the connection failed. In this callback, we will be signalling that
@@ -473,6 +485,7 @@ func CreateHandlers() http.Handler {
 
 		})
 
+		// Listen for ICE candidates
 		peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
 			if c == nil {
 				return
@@ -496,20 +509,32 @@ func CreateHandlers() http.Handler {
 			}
 		}()
 
-		tracksAndConnections.AddPeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
-		defer tracksAndConnections.RemovePeerConnection(KeyIDString(keyID), BroadcastIDString(id), KindString(kind), peerConnection)
+		// Add a receiving peer connection to the list of receiving peer connections
+		tracksAndConnections.AddReceivingPeerConnection(
+			KeyIDString(keyID),
+			BroadcastIDString(id),
+			KindString(kind),
+			peerConnection,
+		)
+		defer tracksAndConnections.RemoveReceivingPeerConnection(
+			KeyIDString(keyID),
+			BroadcastIDString(id),
+			KindString(kind),
+			peerConnection,
+		)
 
+		// Loop forever, or at least until shit hits the fan.
 		for {
 			if done.IsDone() {
 				return
 			}
 
-			if done.IsDone() {
-				return
-			}
 			_, b, err := conn.ReadMessage()
 			if err != nil {
-				log.Printf("Reading message from client failed. I guess the client is closed? %s", err.Error())
+				log.Printf(
+					"Reading message from client failed. I guess the client is closed? %s",
+					err.Error(),
+				)
 				return
 			}
 
@@ -524,7 +549,6 @@ func CreateHandlers() http.Handler {
 			}
 
 			switch t.Type {
-			// We will be the one receiving offers, and responding with answers
 			case "SIGNALLING":
 				type Signalling struct {
 					Type string          `json:"type"`
@@ -538,10 +562,6 @@ func CreateHandlers() http.Handler {
 
 				switch s.Type {
 				case "DESCRIPTION":
-					type Description struct {
-						Type string `json:"type"`
-						SDP  string `json:"sdp"`
-					}
 					var d webrtc.SessionDescription
 					if err = json.Unmarshal(s.Data, &d); err != nil {
 						log.Printf("Bad JSON message? %s", err.Error())

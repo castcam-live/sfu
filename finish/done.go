@@ -4,21 +4,24 @@ import "sync"
 
 type Done struct {
 	once   *sync.Once
-	done   chan any
+	lock   *sync.RWMutex
 	isDone bool
 }
 
 func NewDone() Done {
-	return Done{&sync.Once{}, make(chan any), false}
+	return Done{&sync.Once{}, &sync.RWMutex{}, false}
 }
 
 func (d *Done) Finish() {
 	d.once.Do(func() {
-		close(d.done)
+		d.lock.Lock()
+		defer d.lock.Unlock()
 		d.isDone = true
 	})
 }
 
 func (d Done) IsDone() bool {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
 	return d.isDone
 }

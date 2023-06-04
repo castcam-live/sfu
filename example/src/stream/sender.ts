@@ -51,6 +51,9 @@ type SignallingMessage = Omit<
 	data: InferType<typeof descriptionSchema> | InferType<typeof candidateSchema>;
 };
 
+/**
+ * Sender is a container for sending a MediaStreamTrack.
+ */
 export class Sender {
 	private pc: RTCPeerConnection | null = null;
 	private isClosed = false;
@@ -79,29 +82,33 @@ export class Sender {
 			}
 		});
 		this.pc.addEventListener("negotiationneeded", () => {
-			Promise.resolve().then(async () => {
-				const offer = await this.pc!.createOffer();
-				this.pc!.setLocalDescription(offer);
+			Promise.resolve()
+				.then(async () => {
+					const offer = await this.pc!.createOffer();
+					this.pc!.setLocalDescription(offer);
 
-				if (!offer.sdp) {
-					// TODO: handle this edge case
-					console.error("An SDP was not available for some reason");
-					return;
-				}
+					if (!offer.sdp) {
+						// TODO: handle this edge case
+						console.error("An SDP was not available for some reason");
+						return;
+					}
 
-				const message: SignallingMessage = {
-					type: "SIGNALLING",
-					data: {
-						type: "DESCRIPTION",
+					const message: SignallingMessage = {
+						type: "SIGNALLING",
 						data: {
-							type: "offer",
-							sdp: offer.sdp,
+							type: "DESCRIPTION",
+							data: {
+								type: "offer",
+								sdp: offer.sdp,
+							},
 						},
-					},
-				};
+					};
 
-				this.session.send(JSON.stringify(message));
-			});
+					this.session.send(JSON.stringify(message));
+				})
+				// TODO: this silently fails. Figure out a way to make this fail by
+				//   notifying the client code.
+				.catch(console.error);
 		});
 		if (this.track) {
 			this.setTrackOnly(this.track);

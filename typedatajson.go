@@ -3,8 +3,8 @@ package main
 import "encoding/json"
 
 type TypeDataJSON struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
 }
 
 func Decode[V any](b []byte) (V, error) {

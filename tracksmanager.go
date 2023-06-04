@@ -10,8 +10,8 @@ type KeyIDString string
 type BroadcastIDString string
 type KindString string
 
-// TracksAndConnectionsManager is just a simple whose sole purpose is to manage tracks, and
-// adding tracks to a peer connection, and nothing more.
+// TracksAndConnectionsManager is just a simple object, whose sole purpose is to
+// manage tracks, and adding tracks to a peer connection, and nothing more.
 type TracksAndConnectionsManager struct {
 	lock *sync.RWMutex
 
@@ -103,9 +103,9 @@ func (t TracksAndConnectionsManager) SetTrack(
 	}
 }
 
-// AddPeerConnection adds a peer connection to the list of peer connections, and
+// AddReceivingPeerConnection adds a peer connection to the list of peer connections, and
 // adds the track to the peer connection.
-func (t TracksAndConnectionsManager) AddPeerConnection(
+func (t TracksAndConnectionsManager) AddReceivingPeerConnection(
 	keyId KeyIDString,
 	broadcastId BroadcastIDString,
 	kind KindString,
@@ -133,8 +133,8 @@ func (t TracksAndConnectionsManager) AddPeerConnection(
 	setTrackForPeerConnection(pc, track)
 }
 
-// RemovePeerConnection removes a peer connection from the list of peers.
-func (t TracksAndConnectionsManager) RemovePeerConnection(
+// RemoveReceivingPeerConnection removes a peer connection from the list of peers.
+func (t TracksAndConnectionsManager) RemoveReceivingPeerConnection(
 	keyId KeyIDString,
 	broadcastId BroadcastIDString,
 	kind KindString,
