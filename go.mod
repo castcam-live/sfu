@@ -1,4 +1,4 @@
-module github.com/clubcabana/simple-forwarding-unit
+module github.com/castcam-live/simple-forwarding-unit
 
 go 1.20
 

@@ -61,7 +61,7 @@ class WsSession {
 	}
 
 	/**
-	 * Closes the WebSocket connection..
+	 * Closes the WebSocket connection.
 	 */
 	close() {
 		this.closed = true;
@@ -73,6 +73,10 @@ class WsSession {
 	 */
 	get messageEvents(): EventEmitter<MessageEvent> {
 		return { addEventListener: this._messageEvents.addEventListener };
+	}
+
+	get stateEvents(): EventEmitter<States> {
+		return { addEventListener: this._stateEvents.addEventListener };
 	}
 }
 
@@ -97,8 +101,6 @@ const messageSchema = either(
 		data: either(descriptionSchema, candidateSchema),
 	})
 );
-
-type Message = InferType<typeof messageSchema>;
 
 type ReceiverParams = {
 	keyId: string;
@@ -137,20 +139,27 @@ export class Receiver {
 			const message = JSON.parse(event.data);
 
 			const validation = messageSchema.validate(message);
-			if (validation.isValid) {
+			if (!validation.isValid) {
+				return;
 			}
 
-			if (message.type === "SIGNALLING") {
-				if (message.data.type === "DESCRIPTION") {
-					if (message.data.data.type === "offer") {
-						this.handleOffer(message.data.data);
+			if (validation.value.type === "SIGNALLING") {
+				if (validation.value.data.type === "DESCRIPTION") {
+					if (validation.value.data.data.type === "offer") {
+						this.handleOffer(validation.value.data.data);
 					} else {
 						this.closePeerConnection();
 					}
-				} else if (message.data.type === "CANDIDATE") {
-					this.handleCandidate(message.data.data);
+				} else if (validation.value.data.type === "CANDIDATE") {
+					this.handleCandidate(validation.value.data.data);
 				}
 			}
+
+			this.ws.stateEvents.addEventListener((state) => {
+				if (state === "DISCONNECTED") {
+					this.closePeerConnection();
+				}
+			});
 		});
 	}
 
@@ -170,7 +179,15 @@ export class Receiver {
 			});
 			this.peerConnection.addEventListener("icecandidate", (event) => {
 				if (event.candidate) {
-					// TODO: send the candidate to the server
+					this.ws.send(
+						JSON.stringify({
+							type: "SIGNALLING",
+							data: {
+								type: "ICE_CANDIDATE",
+								data: event.candidate,
+							},
+						})
+					);
 				}
 			});
 		}
@@ -188,7 +205,15 @@ export class Receiver {
 		await pc.setRemoteDescription(offer);
 		const answer = await pc.createAnswer();
 		await pc.setLocalDescription(answer);
-		// TODO: send the answer to the server
+		this.ws.send(
+			JSON.stringify({
+				type: "SIGNALLING",
+				data: {
+					type: "DESCRIPTION",
+					data: answer,
+				},
+			})
+		);
 	}
 
 	private async handleCandidate(candidate: RTCIceCandidate) {

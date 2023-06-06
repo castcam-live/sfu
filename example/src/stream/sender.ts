@@ -166,6 +166,9 @@ export class Sender {
 		this.initializePc();
 	}
 
+	/**
+	 * Closes the peer connection and the session.
+	 */
 	close() {
 		this.isClosed = true;
 		this.pc?.close();

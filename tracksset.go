@@ -1,6 +1,6 @@
 package main
 
-import "github.com/clubcabana/simple-forwarding-unit/trackpipe"
+import "github.com/castcam-live/simple-forwarding-unit/trackpipe"
 
 type TracksSet struct {
 	tracks Map3D[KeyIDString, BroadcastIDString, KindString, trackpipe.Track]

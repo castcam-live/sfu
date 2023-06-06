@@ -1,10 +1,15 @@
 package main
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/castcam-live/simple-forwarding-unit/config"
+)
 
 func main() {
 	router := CreateHandlers()
 
-	// TODO: soft code this
-	http.ListenAndServe(":8080", router)
+	fmt.Println("Listening on port", config.PortNumber())
+	panic(http.ListenAndServe(fmt.Sprintf(":%d", config.PortNumber()), router))
 }

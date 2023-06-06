@@ -5,7 +5,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/clubcabana/simple-forwarding-unit/finish"
+	"github.com/castcam-live/simple-forwarding-unit/finish"
 	"github.com/pion/webrtc/v3"
 )
 

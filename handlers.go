@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/castcam-live/simple-forwarding-unit/finish"
 	wskeyauth "github.com/castcam-live/ws-key-auth/go"
-	"github.com/clubcabana/simple-forwarding-unit/finish"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
