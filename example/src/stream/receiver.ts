@@ -11,8 +11,14 @@ class WsSession {
 	private closed: boolean = false;
 	private ws: WebSocket | null = null;
 	private messageBuffer: string[] = [];
-	private _messageEvents: Subject<MessageEvent> = createSubject();
+	private _messageEvents: Subject<MessageEvent<unknown>> = createSubject();
+	private _stateEvents: Subject<States> = createSubject();
 
+	/**
+	 * Creates a new WsSession. This differs from a WebSocket in that it will
+	 * automatically reconnect if the connection is closed.
+	 * @param address The address to connect to
+	 */
 	constructor(private address: string) {
 		this.connect();
 	}
@@ -20,14 +26,24 @@ class WsSession {
 	private connect() {
 		if (this.closed) return;
 
+		setTimeout(() => {
+			this._stateEvents.emit("CONNECTING");
+		});
 		this.ws = new WebSocket(this.address);
 		this.ws.addEventListener("close", () => {
+			setTimeout(() => {
+				this._stateEvents.emit("DISCONNECTED");
+			});
 			this.connect();
 		});
 
 		this.ws.addEventListener("open", () => {
+			if (!this.ws) return;
+			setTimeout(() => {
+				this._stateEvents.emit("CONNECTED");
+			});
 			for (const m of this.messageBuffer) {
-				this.ws!.send(m);
+				this.ws.send(m);
 			}
 		});
 
@@ -42,6 +58,21 @@ class WsSession {
 		} else {
 			this.ws.send(data);
 		}
+	}
+
+	/**
+	 * Closes the WebSocket connection..
+	 */
+	close() {
+		this.closed = true;
+		this.ws?.close();
+	}
+
+	/**
+	 * An event emitter that emits messages received from the server
+	 */
+	get messageEvents(): EventEmitter<MessageEvent> {
+		return { addEventListener: this._messageEvents.addEventListener };
 	}
 }
 
@@ -79,22 +110,30 @@ export class Receiver {
 	private _mediaStream: MediaStream = new MediaStream();
 	private peerConnection: RTCPeerConnection | null = null;
 
-	private keyId: string;
-	private streamId: string;
+	// private keyId: string;
+	// private streamId: string;
 	private kind: string;
+
+	private ws: WsSession;
 
 	constructor(
 		address: string,
 		{ keyId, streamId, kind }: ReceiverParams,
 		private rtcPCConfig?: RTCConfiguration
 	) {
-		this.keyId = keyId;
-		this.streamId = streamId;
+		// this.keyId = keyId;
+		// this.streamId = streamId;
 		this.kind = kind;
 
-		const ws = new WebSocket(address);
+		// Create the URL for the websocket session
+		const url = new URL(address);
+		url.searchParams.set("keyId", keyId);
+		url.searchParams.set("streamId", streamId);
+		url.searchParams.set("kind", kind);
 
-		ws.addEventListener("message", (event) => {
+		this.ws = new WsSession(url.toString());
+
+		this.ws.messageEvents.addEventListener((event) => {
 			const message = JSON.parse(event.data);
 
 			const validation = messageSchema.validate(message);
@@ -105,6 +144,8 @@ export class Receiver {
 				if (message.data.type === "DESCRIPTION") {
 					if (message.data.data.type === "offer") {
 						this.handleOffer(message.data.data);
+					} else {
+						this.closePeerConnection();
 					}
 				} else if (message.data.type === "CANDIDATE") {
 					this.handleCandidate(message.data.data);
@@ -116,8 +157,22 @@ export class Receiver {
 	private getPeerConnection() {
 		if (this.peerConnection === null) {
 			this.peerConnection = new RTCPeerConnection(this.rtcPCConfig);
-			this.peerConnection.addEventListener("track", (event) => {});
-			this.peerConnection.addEventListener("icecandidate", (event) => {});
+			this.peerConnection.addEventListener("track", (event) => {
+				if (event.track.kind === this.kind) {
+					const track = this._mediaStream
+						.getTracks()
+						.find((track) => track.kind === this.kind);
+					if (track) {
+						this._mediaStream.removeTrack(track);
+					}
+					this._mediaStream.addTrack(event.track);
+				}
+			});
+			this.peerConnection.addEventListener("icecandidate", (event) => {
+				if (event.candidate) {
+					// TODO: send the candidate to the server
+				}
+			});
 		}
 
 		return this.peerConnection;
@@ -125,17 +180,19 @@ export class Receiver {
 
 	private closePeerConnection() {
 		this.peerConnection?.close();
+		this.peerConnection = null;
 	}
 
 	private async handleOffer(offer: RTCSessionDescriptionInit) {
-		this.getPeerConnection();
-
-		await this.peerConnection!.setRemoteDescription(offer);
+		const pc = this.getPeerConnection();
+		await pc.setRemoteDescription(offer);
+		const answer = await pc.createAnswer();
+		await pc.setLocalDescription(answer);
+		// TODO: send the answer to the server
 	}
 
 	private async handleCandidate(candidate: RTCIceCandidate) {
 		const pc = this.getPeerConnection();
-
 		await pc.addIceCandidate(candidate);
 	}
 

@@ -1,7 +1,11 @@
 import { WsKeySession } from "./ws-key-session";
-import { connect, encodeBase64 } from "./wskeyid";
+import { encodeBase64 } from "./wskeyid";
 import { object, unknown, exact, string, InferType } from "./validator";
 
+/**
+ * Generates a new key pair to be used for ECDSA signing
+ * @returns A new SubtleCrypto KeyPair
+ */
 export async function generateKeys() {
 	return await crypto.subtle.generateKey(
 		{ name: "ECDSA", namedCurve: "P-256" },
@@ -10,6 +14,11 @@ export async function generateKeys() {
 	);
 }
 
+/**
+ * Derives a client ID from a key pair
+ * @param keyPair The key pair to use to derive the client ID
+ * @returns A string representing the client ID
+ */
 export async function getClientId(keyPair: CryptoKeyPair) {
 	const algo = keyPair.publicKey.algorithm;
 	if (algo.name !== "ECDSA" && algo.name !== "ECDH") {
