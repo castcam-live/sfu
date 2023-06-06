@@ -225,12 +225,7 @@ func CreateHandlers() http.Handler {
 				return
 			}
 
-			type TD struct {
-				Type string          `json:"type"`
-				Data json.RawMessage `json:"data"`
-			}
-
-			var t TD
+			var t TypeData[json.RawMessage]
 			if err = json.Unmarshal(b, &t); err != nil {
 				continue
 			}
@@ -532,12 +527,7 @@ func CreateHandlers() http.Handler {
 				return
 			}
 
-			type TD struct {
-				Type string          `json:"type"`
-				Data json.RawMessage `json:"data"`
-			}
-
-			var t TD
+			var t TypeData[json.RawMessage]
 			if err = json.Unmarshal(b, &t); err != nil {
 				continue
 			}
@@ -558,9 +548,9 @@ func CreateHandlers() http.Handler {
 					}
 
 					if d.Type == webrtc.SDPTypeOffer {
-						conn.WriteJSON(map[string]any{
-							"type": "CLIENT_ERROR",
-							"data": map[string]any{
+						conn.WriteJSON(TypeData[map[string]any]{
+							Type: "CLIENT_ERROR",
+							Data: map[string]any{
 								"type": "OFFER_RECEIVED",
 								"msg":  "Received offer from client; server can't accept offers; only answers",
 							},
@@ -570,10 +560,10 @@ func CreateHandlers() http.Handler {
 
 					if err = peerConnection.SetRemoteDescription(d); err != nil {
 						log.Printf("Failed to set remote description: %s", err.Error())
-						conn.WriteJSON(map[string]any{
-							"type": "SERVER_ERROR",
-							"data": map[string]any{
-								"type": "SET_REMOTE_DESCRIPTION_FAILED",
+						conn.WriteJSON(TypeData[TypeOnly]{
+							Type: "SERVER_ERROR",
+							Data: TypeOnly{
+								Type: "SET_REMOTE_DESCRIPTION_FAILED",
 							},
 						})
 						return
