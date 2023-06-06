@@ -1,6 +1,6 @@
+import { SignallingMessage } from "./schema";
 import { WsKeySession } from "./ws-key-session";
 import { encodeBase64 } from "./wskeyid";
-import { object, unknown, exact, string, InferType } from "./validator";
 
 /**
  * Generates a new key pair to be used for ECDSA signing
@@ -34,31 +34,6 @@ export async function getClientId(keyPair: CryptoKeyPair) {
 			.namedCurve
 	}$${encodedRaw}`;
 }
-
-const descriptionSchema = object({
-	type: exact("DESCRIPTION"),
-	data: object({
-		type: exact("offer"),
-		sdp: string(),
-	}),
-});
-
-const candidateSchema = object({
-	type: exact("ICE_CANDIDATE"),
-	data: object({}), // An RTCIceCandidate instance
-});
-
-const signallingMessageSchema = object({
-	type: exact("SIGNALLING"),
-	data: unknown(),
-});
-
-type SignallingMessage = Omit<
-	InferType<typeof signallingMessageSchema>,
-	"data"
-> & {
-	data: InferType<typeof descriptionSchema> | InferType<typeof candidateSchema>;
-};
 
 /**
  * Sender is a container for sending a MediaStreamTrack.
@@ -184,7 +159,7 @@ export class Sender {
 	) {
 		// General idea is this:
 		//
-		// - create a WSKeyID session
+		// - create a WSKeyID session to server
 		// -
 
 		this.session = new WsKeySession(address, clientId, sign);

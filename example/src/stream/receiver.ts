@@ -1,3 +1,4 @@
+import { SignallingMessage } from "./schema";
 import { Subject, EventEmitter, createSubject } from "./subject";
 import { InferType, any, either, exact, object, string } from "./validator";
 
@@ -186,7 +187,7 @@ export class Receiver {
 								type: "ICE_CANDIDATE",
 								data: event.candidate,
 							},
-						})
+						} as SignallingMessage)
 					);
 				}
 			});
@@ -212,7 +213,7 @@ export class Receiver {
 					type: "DESCRIPTION",
 					data: answer,
 				},
-			})
+			} as SignallingMessage)
 		);
 	}
 
