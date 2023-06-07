@@ -46,7 +46,11 @@ export class Sender {
 	private track: MediaStreamTrack | null = null;
 
 	private initializePc() {
+		// NOTE: this function is idempotent if a PC is already set
+
 		if (this.isClosed) return;
+		if (this.pc) return;
+
 		this.pc = new RTCPeerConnection(this.rtcPCConfig);
 		this.pc.addEventListener("connectionstatechange", () => {
 			if (this.pc?.connectionState === "disconnected") {
@@ -146,7 +150,7 @@ export class Sender {
 	 */
 	close() {
 		this.isClosed = true;
-		this.pc?.close();
+		this.closePc();
 		this.session.close();
 	}
 
@@ -160,7 +164,8 @@ export class Sender {
 		// General idea is this:
 		//
 		// - create a WSKeyID session to server
-		// -
+		// - if a sender exists, then a track MUST be set (like hello, why should it
+		//   not?)
 
 		this.session = new WsKeySession(address, clientId, sign);
 		this.session.stateChangeEvents.addEventListener((state) => {
