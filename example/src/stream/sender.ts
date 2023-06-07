@@ -16,18 +16,16 @@ export async function generateKeys() {
 
 /**
  * Derives a client ID from a key pair
- * @param keyPair The key pair to use to derive the client ID
+ * @param publicKey The key pair to use to derive the client ID
  * @returns A string representing the client ID
  */
-export async function getClientId(keyPair: CryptoKeyPair) {
-	const algo = keyPair.publicKey.algorithm;
+export async function getClientId(publicKey: CryptoKey) {
+	const algo = publicKey.algorithm;
 	if (algo.name !== "ECDSA" && algo.name !== "ECDH") {
-		throw new Error(
-			`Unexpected key algorithm "${keyPair.publicKey.algorithm.name}"`
-		);
+		throw new Error(`Unexpected key algorithm "${publicKey.algorithm.name}"`);
 	}
 	const encodedRaw = encodeBase64(
-		await crypto.subtle.exportKey("raw", keyPair.publicKey)
+		await crypto.subtle.exportKey("raw", publicKey)
 	);
 	return `WebCrypto-raw.EC.${
 		(algo as KeyAlgorithm & { namedCurve: "P-256" | "P-384" | "P-256" })

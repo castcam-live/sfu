@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import StreamPlayer from "./StreamPlayer";
+import { generateKeys, getClientId } from "./stream/sender";
 
 class MediaManager {
 	constructor() {}
@@ -30,7 +31,6 @@ function MediaDeviceSelector({ kind, onSelect }: MediaDevicesSelectorProps) {
 			if (cancelled) return;
 			getMediaDevicesList(kind).then((devices) => {
 				if (cancelled) return;
-				console.log(devices);
 				setDevices(devices);
 			});
 		};
@@ -72,10 +72,10 @@ export function Stream() {
 		MediaDeviceInfo["deviceId"] | null
 	>(null);
 	const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+	const [videoStreamId, setVideoStreamId] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (videoDevice) {
-			console.log(videoDevice);
 			navigator.mediaDevices
 				.getUserMedia({
 					video: { deviceId: videoDevice },
@@ -102,6 +102,22 @@ export function Stream() {
 					/>
 				</div>
 			)}
+
+			<div>
+				<button
+					onClick={() => {
+						generateKeys()
+							.then(async (keys) => {
+								const clientId = await getClientId(keys.publicKey);
+								console.log(clientId);
+							})
+							// TODO: properly handle errors!
+							.catch(console.error);
+					}}
+				>
+					Publish
+				</button>
+			</div>
 
 			<MediaDeviceSelector kind="videoinput" onSelect={setVideoDevice} />
 		</div>
