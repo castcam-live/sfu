@@ -1,6 +1,6 @@
 import { SignallingMessage } from "./schema";
 import { Subject, EventEmitter, createSubject } from "./subject";
-import { InferType, any, either, exact, object, string } from "./validator";
+import { any, either, exact, object, string } from "./validator";
 
 type States = "CONNECTING" | "CONNECTED" | "DISCONNECTED";
 
@@ -76,6 +76,9 @@ class WsSession {
 		return { addEventListener: this._messageEvents.addEventListener };
 	}
 
+	/**
+	 * An event emitter that emits the state of the connection
+	 */
 	get stateEvents(): EventEmitter<States> {
 		return { addEventListener: this._stateEvents.addEventListener };
 	}
@@ -109,6 +112,9 @@ type ReceiverParams = {
 	kind: string;
 };
 
+/**
+ * Receiver is a class that receives a stream from a server
+ */
 export class Receiver {
 	private _mediaStream: MediaStream = new MediaStream();
 	private peerConnection: RTCPeerConnection | null = null;
